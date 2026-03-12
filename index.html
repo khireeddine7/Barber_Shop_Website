@@ -113,6 +113,11 @@ from{opacity:0;transform:translateY(-10px);}
 to{opacity:1;}
 }
 </style>
+
+<!-- Firebase Libraries -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
 </head>
 <body>
 
@@ -195,20 +200,34 @@ to{opacity:1;}
 <footer>DEVLOPPED BY KHIREEDDINE_RJX7 2026</footer>
 
 <script>
-let selectedBarber=""
-let currentBarber=""
+// Firebase Config
+const firebaseConfig = {
+  apiKey: "AIzaSyAeJInebKfux2ssPXAo8CvxtO3TmTCQTso",
+  authDomain: "barberreservation-ac73b.firebaseapp.com",
+  databaseURL: "https://barberreservation-ac73b-default-rtdb.firebaseio.com",
+  projectId: "barberreservation-ac73b",
+  storageBucket: "barberreservation-ac73b.firebasestorage.app",
+  messagingSenderId: "518886630808",
+  appId: "1:518886630808:web:2cc4af2b3cfc5a68b9f7ed",
+  measurementId: "G-R4PWP21SGP"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
 
-const accounts={
-"khireeddine":"1234567891011",
-"nadir":"12345",
-"oussama":"1234567",
-"zakaria":"1234567"
-}
+// ======== المتغيرات والدوال العامة ========
+let selectedBarber = "";
+let currentBarber = "";
+
+const accounts = {
+  "khireeddine":"1234567891011",
+  "nadir":"12345",
+  "oussama":"1234567",
+  "zakaria":"1234567"
+};
 
 function toggleMode(){document.body.classList.toggle("light")}
 function show(id){document.querySelectorAll(".screen").forEach(s=>s.classList.remove("active"));document.getElementById(id).classList.add("active");}
 function selectBarber(name){selectedBarber=name;document.getElementById("msg").innerText="الحلاق المختار: "+name;}
-
 function clearCustomerInputs(){
 document.getElementById("name").value="";
 document.getElementById("phone").value="";
@@ -219,7 +238,6 @@ document.getElementById("noBookingMsg").innerText="";
 document.getElementById("myList").innerHTML="";
 document.getElementById("searchPhone").value="";
 }
-
 function goBack(){
 clearCustomerInputs();
 document.getElementById("loginMsg").innerText="";
@@ -227,43 +245,51 @@ document.getElementById("actionMsg").style.display="none";
 show('home');
 }
 
-// مسح جميع الحجوزات
-function clearAllBookings(){
-if(confirm("هل تريد حذف كل الحجوزات والبدء من جديد؟")){
-localStorage.removeItem("bookings");
-alert("تم مسح كل الحجوزات!");
-location.reload();
-}
-}
-
+// ======== الحجز ========
 function book(){
-let name=document.getElementById("name").value
-let phone=document.getElementById("phone").value
-let date=document.getElementById("date").value
-let time=document.getElementById("time").value
+    let name = document.getElementById("name").value;
+    let phone = document.getElementById("phone").value;
+    let date = document.getElementById("date").value;
+    let time = document.getElementById("time").value;
 
-if(!name||!phone||!date||!time||!selectedBarber){document.getElementById("msg").innerText="⚠️ املأ كل البيانات";return}
+    if(!name || !phone || !date || !time || !selectedBarber){
+        document.getElementById("msg").innerText = "⚠️ املأ كل البيانات";
+        return;
+    }
 
-let selectedDate=new Date(date+" "+time)
-let now=new Date()
-if((selectedDate-now)/60000<10){document.getElementById("msg").innerText="❌ يجب الحجز قبل 10 دقائق على الأقل";return}
+    let selectedDate = new Date(date+" "+time);
+    let now = new Date();
+    if((selectedDate-now)/60000 < 10){document.getElementById("msg").innerText="❌ يجب الحجز قبل 10 دقائق على الأقل";return;}
 
-let bookings=JSON.parse(localStorage.getItem("bookings")||"[]")
-let exists=bookings.find(b=>b.barber==selectedBarber && b.date==date && b.time==time)
-if(exists){document.getElementById("msg").innerText="❌ هذا الوقت محجوز";return}
+    let booking = {
+        name: name,
+        phone: "+213" + phone,
+        barber: selectedBarber,
+        date: date,
+        time: time,
+        status: "WAIT"
+    };
 
-bookings.push({name,phone:"+213"+phone,barber:selectedBarber,date,time,status:"WAIT"})
-localStorage.setItem("bookings",JSON.stringify(bookings))
-document.getElementById("msg").innerText="✅ تم ارسال طلب الحجز"
-clearCustomerInputs()
+    // حفظ الحجز في Firebase
+    const newBookingRef = db.ref('bookings').push();
+    newBookingRef.set(booking)
+    .then(()=>{
+        document.getElementById("msg").innerText = "✅ تم ارسال طلب الحجز";
+        clearCustomerInputs();
+    })
+    .catch(err=>{
+        console.error(err);
+        document.getElementById("msg").innerText = "❌ خطأ في الاتصال بالسيرفر";
+    });
 }
 
+// ======== تسجيل الدخول للحلاق ========
 function login(){
 clearCustomerInputs();
-let u=document.getElementById("user").value.toLowerCase()
-let p=document.getElementById("pass").value
-if(accounts[u]==p){currentBarber=u;show("admin");loadBookings()}else{document.getElementById("loginMsg").innerText="❌ معلومات خاطئة"}}
-
+let u=document.getElementById("user").value.toLowerCase();
+let p=document.getElementById("pass").value;
+if(accounts[u]==p){currentBarber=u;show("admin");loadBookings()}else{document.getElementById("loginMsg").innerText="❌ معلومات خاطئة"}
+}
 function logoutAdmin(){
 currentBarber="";
 document.getElementById("user").value="";
@@ -271,80 +297,87 @@ document.getElementById("pass").value="";
 goBack();
 }
 
+// ======== عرض الحجوزات ========
 function loadBookings(){
-let bookings=JSON.parse(localStorage.getItem("bookings")||"[]")
-let list=document.getElementById("list")
-list.innerHTML=""
-bookings.forEach((b,i)=>{
-if(b.barber.toLowerCase()==currentBarber){
-list.innerHTML+=`<div class="booking"><b>${b.name}</b><br>${b.phone}<br>${b.date} ${b.time}<br>
-<button onclick="accept(${i})">قبول</button>
-<button onclick="reject(${i})">رفض</button>
-<button onclick="deleteBooking(${i})">حذف</button></div>`}})}
+    const list = document.getElementById("list");
+    list.innerHTML = "";
+    db.ref('bookings').once('value', snapshot => {
+        const bookings = snapshot.val();
+        if(!bookings) return;
+        for(const key in bookings){
+            const b = bookings[key];
+            if(b.barber.toLowerCase() === currentBarber){
+                list.innerHTML += `<div class="booking">
+                    <b>${b.name}</b><br>${b.phone}<br>${b.date} ${b.time}<br>
+                    <button onclick="updateStatus('${key}','ACCEPTED')">قبول</button>
+                    <button onclick="updateStatus('${key}','REJECTED')">رفض</button>
+                    <button onclick="deleteBooking('${key}')">حذف</button>
+                </div>`;
+            }
+        }
+    });
+}
 
+function updateStatus(key, status){
+    db.ref('bookings/'+key).update({status: status})
+    .then(()=>{showActionMsg(`تم تحديث حالة الحجز إلى ${status}`); loadBookings();});
+}
+
+function deleteBooking(key){
+    db.ref('bookings/'+key).remove()
+    .then(()=>{showActionMsg("تم حذف الحجز"); loadBookings();});
+}
+
+// ======== الرسائل ========
 function showActionMsg(text){
-let m=document.getElementById("actionMsg")
-m.innerText=text
-m.style.display="block"
-setTimeout(()=>{m.style.display="none"},3000)
+let m=document.getElementById("actionMsg");
+m.innerText=text;
+m.style.display="block";
+setTimeout(()=>{m.style.display="none"},3000);
 }
 
-function accept(i){
-let bookings=JSON.parse(localStorage.getItem("bookings"))
-bookings[i].status="ACCEPTED"
-localStorage.setItem("bookings",JSON.stringify(bookings))
-showActionMsg("✅ تم قبول حجز "+bookings[i].name)
-clearCustomerInputs()
-loadBookings()
-}
-
-function reject(i){
-let bookings=JSON.parse(localStorage.getItem("bookings"))
-bookings[i].status="REJECTED"
-localStorage.setItem("bookings",JSON.stringify(bookings))
-showActionMsg("❌ تم رفض حجز "+bookings[i].name)
-clearCustomerInputs()
-loadBookings()
-}
-
-function deleteBooking(i){
-let bookings=JSON.parse(localStorage.getItem("bookings"))
-bookings.splice(i,1)
-localStorage.setItem("bookings",JSON.stringify(bookings))
-loadBookings()
-}
-
-// دالة البحث وعرض الحجوزات للزبون مع حالة كل حجز ورسائل واضحة
+// ======== البحث عن الحجوزات ========
 function findBookings(){
-let inputPhone=document.getElementById("searchPhone").value;
-document.getElementById("myList").innerHTML="";
-document.getElementById("noBookingMsg").innerText="";
+    let inputPhone = document.getElementById("searchPhone").value;
+    document.getElementById("myList").innerHTML = "";
+    document.getElementById("noBookingMsg").innerText = "";
 
-if(inputPhone.length!==9){
-document.getElementById("noBookingMsg").innerText="⚠️ الرجاء إدخال 9 أرقام صحيحة";
-return;
+    if(inputPhone.length!==9){
+        document.getElementById("noBookingMsg").innerText="⚠️ الرجاء إدخال 9 أرقام صحيحة";
+        return;
+    }
+
+    let phone = "+213" + inputPhone;
+
+    db.ref('bookings').once('value', snapshot => {
+        const bookings = snapshot.val();
+        let found = false;
+        for(const key in bookings){
+            const b = bookings[key];
+            if(b.phone === phone){
+                found = true;
+                let statusClass="status-wait", statusText="قيد الانتظار ⏳";
+                if(b.status==="ACCEPTED"){statusClass="status-accepted"; statusText="مقبول ✅";}
+                if(b.status==="REJECTED"){statusClass="status-rejected"; statusText="مرفوض ❌";}
+                document.getElementById("myList").innerHTML += `<div class="booking">
+                    <b>الحلاق:</b> ${b.barber}<br>
+                    <b>التاريخ والوقت:</b> ${b.date} ${b.time}<br>
+                    <span class="${statusClass}">${statusText}</span>
+                </div>`;
+            }
+        }
+        if(!found){
+            document.getElementById("noBookingMsg").innerText="⚠️ لا توجد حجوزات بهذا الرقم";
+        }
+    });
 }
 
-let phone="+213"+inputPhone;
-let bookings=JSON.parse(localStorage.getItem("bookings")||[]);
-let found=false;
-
-bookings.forEach(b=>{
-if(b.phone===phone){
-found=true;
-let statusClass="status-wait", statusText="قيد الانتظار ⏳";
-if(b.status==="ACCEPTED"){statusClass="status-accepted"; statusText="مقبول ✅";}
-if(b.status==="REJECTED"){statusClass="status-rejected"; statusText="مرفوض ❌";}
-document.getElementById("myList").innerHTML+=`<div class="booking">
-<b>الحلاق:</b> ${b.barber}<br>
-<b>التاريخ والوقت:</b> ${b.date} ${b.time}<br>
-<span class="${statusClass}">${statusText}</span>
-</div>`;
-}
-});
-
-if(!found){
-document.getElementById("noBookingMsg").innerText="⚠️ لا توجد حجوزات بهذا الرقم";
+// ======== مسح جميع الحجوزات (تحذيري) ========
+function clearAllBookings(){
+if(confirm("هل تريد حذف كل الحجوزات والبدء من جديد؟")){
+    db.ref('bookings').remove()
+    .then(()=>{alert("تم مسح كل الحجوزات!"); location.reload();})
+    .catch(err=>{console.error(err); alert("❌ خطأ أثناء المسح");});
 }
 }
 </script>
